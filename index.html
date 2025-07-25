@@ -387,32 +387,55 @@
                 return;
             }
 
-            console.log('Uploading file:', file.name, 'Size:', file.size);
+            console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
 
             try {
                 // Show processing UI
                 showProcessing('📄 Uploading PDF to Google Drive...');
                 
-                // Create FormData for file upload
+                // Create FormData for file upload with detailed logging
                 const formData = new FormData();
                 formData.append('action', 'upload');
-                formData.append('file', file);
+                formData.append('file', file, file.name);
                 
+                console.log('FormData created with:');
+                console.log('- action: upload');
+                console.log('- file:', file.name);
+                console.log('- file size:', file.size);
                 console.log('Uploading to:', CONFIG.GOOGLE_SCRIPT_URL);
                 
-                // Upload file to Google Apps Script
+                // Upload file to Google Apps Script with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+                
                 const response = await fetch(CONFIG.GOOGLE_SCRIPT_URL, {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    signal: controller.signal
                 });
                 
+                clearTimeout(timeoutId);
+                
                 console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    const errorText = await response.text();
+                    console.log('Error response body:', errorText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}\nDetails: ${errorText}`);
                 }
                 
-                const uploadResult = await response.json();
+                const responseText = await response.text();
+                console.log('Raw response:', responseText);
+                
+                let uploadResult;
+                try {
+                    uploadResult = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error('Failed to parse response as JSON:', parseError);
+                    throw new Error('Invalid response from server: ' + responseText);
+                }
+                
                 console.log('Upload result:', uploadResult);
                 
                 if (!uploadResult.success) {
